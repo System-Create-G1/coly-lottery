@@ -530,7 +530,9 @@ function renderPrizeList() {
     const pct = total > 0 ? ((Number(p.total) || 0) / total * 100).toFixed(1) : '0.0';
     row.innerHTML = `
       <input type="text" value="${escapeHtml(p.name)}" data-field="name" data-idx="${idx}">
+      <span class="remainLabel">設定数</span>
       <input type="number" min="0" value="${p.total}" data-field="total" data-idx="${idx}">
+      <span class="remainLabel">残り<b>${Math.max(0, Number(p.remaining) || 0)}</b></span>
       <span class="pct">${pct}%</span>
       <input type="file" accept="audio/*" data-idx="${idx}" class="soundInput">
       <button class="testSoundBtn" data-idx="${idx}" title="試聴">▶</button>
