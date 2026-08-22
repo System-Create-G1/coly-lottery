@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<title>抽選カード</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background: #1a0f2e;
+    font-family: "FOT-Rodin Pro", "Rodin Pro N", "RodinNTLG Pro", "Rodin",
+                 "Hiragino Sans", "Yu Gothic", sans-serif;
+    user-select: none;
+  }
+
+  .screen {
+    position: fixed; inset: 0; z-index: 3;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background:
+      radial-gradient(circle at 50% 20%, rgba(255,214,120,0.35), transparent 55%),
+      linear-gradient(160deg, #241436 0%, #3a1f4d 45%, #5a2a52 100%);
+    background-size: cover; background-position: center;
+  }
+  .screen.hidden { display: none; }
+
+  /* ── 背景の光の粒 ── */
+  .sparkle {
+    position: absolute; border-radius: 50%;
+    background: radial-gradient(circle, #ffe9a8 0%, rgba(255,233,168,0) 70%);
+    opacity: 0.5; pointer-events: none;
+    animation: floatUp linear infinite;
+  }
+  @keyframes floatUp {
+    0%   { transform: translateY(0) scale(1); opacity: 0; }
+    10%  { opacity: 0.6; }
+    90%  { opacity: 0.3; }
+    100% { transform: translateY(-110vh) scale(1.3); opacity: 0; }
+  }
+
+  header {
+    position: relative; z-index: 2;
+    text-align: center; margin-top: 4vh;
+  }
+  header .kicker {
+    font-size: clamp(11px, 2vw, 14px);
+    letter-spacing: 0.35em;
+    color: #ffd66e;
+    margin-bottom: 6px;
+  }
+  header h1 {
+    font-size: clamp(26px, 6vw, 44px);
+    margin: 0;
+    color: #fff8ea;
+    text-shadow: 0 0 18px rgba(255,214,110,0.55), 0 2px 4px rgba(0,0,0,0.4);
+    letter-spacing: 0.06em;
+  }
+  header .ip-tag {
+    margin-top: 4px;
+    font-size: clamp(12px, 2.4vw, 16px);
+    color: #ffe9c2;
+    letter-spacing: 0.08em;
+  }
+  header .round-tag {
+    margin-top: 2px;
+    font-size: clamp(11px, 2vw, 14px);
+    color: #b7ffcf;
+    letter-spacing: 0.06em;
+  }
+
+  #stage {
+    position: relative; z-index: 2;
+    display: flex; gap: clamp(14px, 3vw, 32px);
+    margin: 5vh 0 3vh;
+  }
+
+  .card {
+    width: clamp(84px, 20vw, 150px);
+    aspect-ratio: 5 / 7;
+    perspective: 1000px;
+    cursor: pointer;
+  }
+  .card-inner {
+    position: relative; width: 100%; height: 100%;
+    transform-style: preserve-3d;
+    transition: transform 0.6s cubic-bezier(.4,.2,.2,1);
+  }
+  .card.flipped .card-inner { transform: rotateY(180deg); }
+  .card.disabled { pointer-events: none; }
+  .card.dim .card-inner { filter: brightness(0.55) saturate(0.7); }
+
+  .card-face {
+    position: absolute; inset: 0;
+    border-radius: 12px;
+    backface-visibility: hidden;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+  }
+  .card-back {
+    background:
+      repeating-linear-gradient(45deg, rgba(255,255,255,0.05) 0 8px, transparent 8px 16px),
+      linear-gradient(160deg, #7a2f6e 0%, #4a1f5c 60%, #2c1240 100%);
+    background-size: cover; background-position: center;
+    border: 2px solid rgba(255,214,110,0.55);
+  }
+  .card-back::after {
+    content: '★';
+    font-size: clamp(28px, 6vw, 46px);
+    color: rgba(255,214,110,0.85);
+    text-shadow: 0 0 10px rgba(255,214,110,0.6);
+  }
+  .card-front {
+    transform: rotateY(180deg);
+    background: linear-gradient(160deg, #fff6df 0%, #ffe6b0 100%);
+    border: 2px solid #ffcf6e;
+    flex-direction: column;
+    padding: 8px;
+    text-align: center;
+  }
+  .card-front.miss {
+    background: linear-gradient(160deg, #eeeeee 0%, #d8d8d8 100%);
+    border-color: #bbb;
+  }
+  .card-front .label {
+    font-size: clamp(15px, 3.6vw, 22px);
+    font-weight: 700;
+    color: #7a3b12;
+    line-height: 1.3;
+    word-break: break-all;
+  }
+  .card-front.miss .label { color: #888; }
+  .card-front .medal {
+    font-size: clamp(20px, 5vw, 30px);
+    margin-bottom: 4px;
+  }
+
+  .bigBtn {
+    position: relative; z-index: 2;
+    border: none; border-radius: 999px;
+    padding: clamp(12px, 2.4vh, 16px) clamp(36px, 8vw, 56px);
+    font-size: clamp(16px, 3.4vw, 20px);
+    font-weight: 700;
+    color: #4a1f00;
+    background: linear-gradient(180deg, #ffe9a8, #ffc65c);
+    box-shadow: 0 6px 0 #c98a1f, 0 10px 18px rgba(0,0,0,0.35);
+    cursor: pointer;
+    letter-spacing: 0.1em;
+    font-family: inherit;
+  }
+  .bigBtn:active { transform: translateY(4px); box-shadow: 0 2px 0 #c98a1f; }
+  .bigBtn.hidden { display: none; }
+
+  #resultText {
+    position: relative; z-index: 2;
+    min-height: 1.6em;
+    margin-bottom: 1.4vh;
+    font-size: clamp(15px, 3.2vw, 20px);
+    color: #fff8ea;
+    text-align: center;
+  }
+
+  /* ── 隠し管理画面アクセスゾーン（お客様には見えない） ── */
+  #adminHiddenZone {
+    position: fixed; top: 0; left: 0; z-index: 999;
+    width: 64px; height: 64px;
+    opacity: 0; cursor: default;
+  }
+
+  /* ── 設定パネル ── */
+  #settingsPanel {
+    position: fixed; inset: 0; z-index: 100;
+    background: rgba(20,10,30,0.6);
+    display: none; align-items: center; justify-content: center;
+  }
+  #settingsPanel.open { display: flex; }
+  #settingsCard {
+    width: min(94vw, 620px); max-height: 88vh; overflow-y: auto;
+    background: #fffaf0; border-radius: 16px; padding: 20px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+  }
+  #settingsCard h2 { margin: 0 0 14px; font-size: 20px; color: #5a2a1a; }
+  #settingsCard section { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 2px dashed #eadfc0; }
+  #settingsCard h3 { margin: 0 0 10px; font-size: 15px; color: #a3661f; }
+  .ipTabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .ipTabs button {
+    flex: 1; padding: 8px; border: 2px solid #ddd; border-radius: 8px;
+    background: #fff; color: #666; font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  .ipTabs button.active { border-color: #ffc65c; background: #fff3d8; color: #7a3b12; }
+  .prizeRow {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    padding: 8px 0; border-bottom: 1px solid #eee2c8;
+  }
+  .prizeRow input[type=text] {
+    flex: 1.4; min-width: 90px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;
+  }
+  .prizeRow input[type=number] {
+    width: 60px; padding: 6px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;
+  }
+  .prizeRow .pct { width: 44px; font-size: 11px; color: #888; text-align: right; }
+  .prizeRow input[type=file] { font-size: 11px; width: 110px; }
+  .prizeRow .testSoundBtn {
+    border: none; background: #6b8fe0; color: #fff; width: 26px; height: 26px; border-radius: 50%;
+    font-size: 12px; cursor: pointer; flex-shrink: 0;
+  }
+  .prizeRow .soundStatus { font-size: 10px; color: #888; width: 60px; }
+  .prizeRow button.removeBtn {
+    border: none; background: #e85c5c; color: #fff; width: 26px; height: 26px; border-radius: 50%;
+    font-size: 14px; cursor: pointer; flex-shrink: 0;
+  }
+  #addPrizeBtn {
+    margin-top: 10px; padding: 8px 14px; border: none; border-radius: 8px;
+    background: #4caf7d; color: #fff; font-size: 14px; cursor: pointer;
+  }
+  .settingsField {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 13px; color: #444;
+  }
+  .settingsField input[type=number] {
+    width: 70px; padding: 6px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;
+  }
+  .settingsField input[type=file] { font-size: 12px; }
+  .miniBtn {
+    padding: 6px 10px; border: none; border-radius: 6px; background: #ddd; color: #333;
+    font-size: 12px; cursor: pointer;
+  }
+  .settingsActions {
+    display: flex; justify-content: space-between; margin-top: 4px; gap: 10px;
+  }
+  .settingsActions button {
+    flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer;
+  }
+  #saveSettingsBtn { background: #ffc65c; color: #4a1f00; font-weight: 700; }
+  #closeSettingsBtn { background: #ddd; color: #333; }
+  #resetCountsBtn { background: #eee; color: #a33; font-size: 12px; width: 100%; margin-top: 8px; padding: 8px; border: none; border-radius: 8px; cursor: pointer; }
+
+  /* ── IP選択画面 ── */
+  #ipButtons {
+    position: relative; z-index: 2;
+    display: flex; gap: clamp(16px, 4vw, 36px);
+    flex-wrap: wrap; justify-content: center;
+    margin-top: 5vh;
+  }
+  .ip-btn {
+    width: clamp(160px, 34vw, 260px);
+    padding: clamp(22px, 4vh, 34px) clamp(10px, 2vw, 18px);
+    border: 2px solid rgba(255,214,110,0.55);
+    border-radius: 16px;
+    background: linear-gradient(160deg, #7a2f6e 0%, #4a1f5c 60%, #2c1240 100%);
+    color: #fff8ea;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+    transition: transform 0.15s ease, filter 0.15s ease;
+    font-family: inherit;
+  }
+  .ip-btn:active { transform: translateY(4px); filter: brightness(1.15); }
+  .ip-btn .ip-btn-label {
+    display: block; white-space: nowrap; overflow: hidden;
+    font-size: 22px;
+  }
+
+  /* ── 回数選択画面 ── */
+  #countGrid {
+    position: relative; z-index: 2;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+    gap: 10px;
+    width: min(90vw, 640px);
+    max-height: 56vh;
+    overflow-y: auto;
+    margin-top: 4vh;
+    padding: 4px;
+  }
+  .count-btn {
+    padding: 12px 4px;
+    border: 2px solid rgba(255,214,110,0.5);
+    border-radius: 10px;
+    background: linear-gradient(160deg, #7a2f6e 0%, #4a1f5c 60%, #2c1240 100%);
+    color: #fff8ea;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .count-btn:active { transform: translateY(3px); filter: brightness(1.2); }
+
+  /* ── セッション結果画面 ── */
+  #sessionResultList {
+    position: relative; z-index: 2;
+    background: rgba(0,0,0,0.25);
+    border: 2px solid rgba(255,214,110,0.4);
+    border-radius: 14px;
+    padding: 20px 28px;
+    margin: 3vh 0;
+    min-width: 240px;
+  }
+  #sessionResultList .row {
+    display: flex; justify-content: space-between; gap: 24px;
+    font-size: 17px; color: #fff8ea; padding: 4px 0;
+  }
+  #sessionResultList .row .num { color: #ffd66e; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div id="adminHiddenZone"></div>
+
+<div id="ipSelectScreen" class="screen">
+  <header>
+    <div class="kicker">CHOOSE YOUR TITLE</div>
+    <h1>作品を選んでね</h1>
+  </header>
+  <div id="ipButtons">
+    <button class="ip-btn" data-ip="matorihime"><span class="ip-btn-label">ドラッグ王子とマトリ姫</span></button>
+    <button class="ip-btn" data-ip="stanmai"><span class="ip-btn-label">スタンドマイヒーローズ</span></button>
+  </div>
+</div>
+
+<div id="countSelectScreen" class="screen hidden">
+  <header>
+    <div class="kicker">HOW MANY TIMES?</div>
+    <h1>何回引く？</h1>
+    <div class="ip-tag" id="countIpTag"></div>
+  </header>
+  <div id="countGrid"></div>
+</div>
+
+<div id="app" class="screen hidden">
+  <header>
+    <div class="kicker">CONGRATULATIONS</div>
+    <h1>抽選カード</h1>
+    <div class="ip-tag" id="ipTag"></div>
+    <div class="round-tag" id="roundTag"></div>
+  </header>
+
+  <div id="resultText"></div>
+
+  <div id="stage"></div>
+</div>
+
+<div id="sessionResultScreen" class="screen hidden">
+  <header>
+    <div class="kicker">RESULT</div>
+    <h1>結果発表！</h1>
+    <div class="ip-tag" id="sessionIpTag"></div>
+  </header>
+  <div id="sessionResultList"></div>
+  <button class="bigBtn" id="backToStartBtn">はじめから</button>
+</div>
+
+<div id="settingsPanel">
+  <div id="settingsCard">
+    <h2>⚙ 管理設定</h2>
+
+    <section>
+      <h3>A. 賞品・在庫・効果音（作品ごとに別管理・デフォルト3種：A賞/B賞/C賞）</h3>
+      <div id="prizeIpTabs" class="ipTabs"></div>
+      <div id="prizeList"></div>
+      <button id="addPrizeBtn">＋ 景品を追加</button>
+      <button id="resetCountsBtn">当選数（在庫）をリセット</button>
+    </section>
+
+    <section>
+      <h3>B. 抽選回数の設定</h3>
+      <div class="settingsField">
+        <span>回数ボタンの最大数（1〜100・デフォルト20）</span>
+        <input type="number" id="maxDrawsInput" min="1" max="100">
+      </div>
+    </section>
+
+    <section>
+      <h3>D. 背景・トランプの柄</h3>
+      <div class="settingsField">
+        <span>背景画像</span>
+        <input type="file" id="bgFileInput" accept="image/*">
+        <button class="miniBtn" id="resetBgBtn">デフォルトに戻す</button>
+      </div>
+      <div class="settingsField">
+        <span>トランプ裏面の柄</span>
+        <input type="file" id="cardBackFileInput" accept="image/*">
+        <button class="miniBtn" id="resetCardBackBtn">デフォルトに戻す</button>
+      </div>
+    </section>
+
+    <div class="settingsActions">
+      <button id="closeSettingsBtn">キャンセル</button>
+      <button id="saveSettingsBtn">保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
