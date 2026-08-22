@@ -269,7 +269,8 @@
   }
   .ip-btn {
     width: clamp(160px, 34vw, 260px);
-    padding: clamp(22px, 4vh, 34px) clamp(10px, 2vw, 18px);
+    height: clamp(90px, 14vh, 120px);
+    padding: clamp(10px, 2vh, 16px) clamp(10px, 2vw, 18px);
     border: 2px solid rgba(255,214,110,0.55);
     border-radius: 16px;
     background: linear-gradient(160deg, #7a2f6e 0%, #4a1f5c 60%, #2c1240 100%);
@@ -280,11 +281,18 @@
     box-shadow: 0 8px 20px rgba(0,0,0,0.35);
     transition: transform 0.15s ease, filter 0.15s ease;
     font-family: inherit;
+    display: flex; align-items: center; justify-content: center;
   }
   .ip-btn:active { transform: translateY(4px); filter: brightness(1.15); }
   .ip-btn .ip-btn-label {
     display: block; white-space: nowrap; overflow: hidden;
     font-size: 22px;
+  }
+  .ip-btn-logo {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto; height: auto;
+    object-fit: contain;
   }
 
   /* ── 回数選択画面 ── */
@@ -341,8 +349,8 @@
     <h1>作品を選んでね</h1>
   </header>
   <div id="ipButtons">
-    <button class="ip-btn" data-ip="matorihime"><span class="ip-btn-label">ドラッグ王子とマトリ姫</span></button>
-    <button class="ip-btn" data-ip="stanmai"><span class="ip-btn-label">スタンドマイヒーローズ</span></button>
+    <button class="ip-btn" data-ip="matorihime"><img class="ip-btn-logo" src="image/matori_logo.png" alt="ドラッグ王子とマトリ姫"></button>
+    <button class="ip-btn" data-ip="stanmai"><img class="ip-btn-logo" src="image/stamy_logo.png" alt="スタンドマイヒーローズ"></button>
   </div>
 </div>
 
