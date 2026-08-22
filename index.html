@@ -45,6 +45,14 @@
     position: relative; z-index: 2;
     text-align: center; margin-top: 4vh;
   }
+  header #ipLogo {
+    display: block;
+    max-width: min(80vw, 520px);
+    width: 100%;
+    height: auto;
+    margin: 0 auto 3vh;
+    filter: drop-shadow(0 4px 14px rgba(0,0,0,0.45));
+  }
   header .kicker {
     font-size: clamp(11px, 2vw, 14px);
     letter-spacing: 0.35em;
@@ -311,6 +319,7 @@
 
 <div id="ipSelectScreen" class="screen">
   <header>
+    <img id="ipLogo" src="logo.png" alt="胸キュンどきどきくじ">
     <div class="kicker">CHOOSE YOUR TITLE</div>
     <h1>作品を選んでね</h1>
   </header>
