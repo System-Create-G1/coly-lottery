@@ -45,13 +45,27 @@
     position: relative; z-index: 2;
     text-align: center; margin-top: 4vh;
   }
-  header #ipLogo {
+  header #fesLogo {
     display: block;
-    max-width: min(80vw, 520px);
+    max-width: min(78vw, 460px);
     width: 100%;
     height: auto;
-    margin: 0 auto 3vh;
+    margin: 0 auto 2.4vh;
     filter: drop-shadow(0 4px 14px rgba(0,0,0,0.45));
+  }
+  header #ipLogoPanel {
+    display: inline-block;
+    background: rgba(255,250,240,0.88);
+    border-radius: 999px;
+    padding: clamp(8px, 1.6vh, 14px) clamp(18px, 3vw, 30px);
+    margin: 0 auto 3vh;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+  }
+  header #ipLogo {
+    display: block;
+    max-width: min(70vw, 440px);
+    width: 100%;
+    height: auto;
   }
   header .kicker {
     font-size: clamp(11px, 2vw, 14px);
@@ -319,7 +333,8 @@
 
 <div id="ipSelectScreen" class="screen">
   <header>
-    <img id="ipLogo" src="logo.png" alt="胸キュンどきどきくじ">
+    <img id="fesLogo" src="image/10fes_gold_logo.png" alt="Anniversary Fes">
+    <div id="ipLogoPanel"><img id="ipLogo" src="image/logo.png" alt="胸キュンどきどきくじ"></div>
     <div class="kicker">CHOOSE YOUR TITLE</div>
     <h1>作品を選んでね</h1>
   </header>
