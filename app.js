@@ -1,6 +1,7 @@
 const CONFIG_KEY = 'coly_lottery_config_v4';
 const OLD_CONFIG_KEY_V3 = 'coly_lottery_config_v3';
 const OLD_PRIZES_KEY = 'coly_lottery_prizes_v2';
+const LOG_KEY = 'coly_lottery_log_v1';
 const CARD_COUNT = 3;
 
 const IP_TITLES = {
@@ -97,6 +98,78 @@ function saveConfig() {
   } catch (e) {
     alert('保存容量の上限を超えた可能性があります。背景・効果音のファイルサイズを小さくしてお試しください。');
   }
+}
+
+/* ── 来店記録（お客様ごとの抽選履歴） ── */
+function loadLog() {
+  try {
+    const raw = localStorage.getItem(LOG_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return { counter: 0, records: [] };
+}
+
+function saveLog() {
+  try {
+    localStorage.setItem(LOG_KEY, JSON.stringify(logData));
+  } catch (e) {
+    alert('記録データの保存容量の上限を超えた可能性があります。設定画面からCSV出力・リセットをご検討ください。');
+  }
+}
+
+let logData = loadLog();
+
+function todayDateStr() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function recordSession() {
+  logData.counter++;
+  logData.records.push({
+    date: todayDateStr(),
+    ip: IP_TITLES[currentIp] || currentIp,
+    customerNo: logData.counter,
+    draws: sessionMaxDraws,
+    prizeCounts: JSON.parse(JSON.stringify(sessionResults)),
+  });
+  saveLog();
+}
+
+function csvEscape(v) {
+  const s = String(v);
+  if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function exportLogCsv() {
+  const fixedPrizeNames = ['A賞', 'B賞', 'C賞'];
+  const extraNames = [];
+  logData.records.forEach((r) => {
+    Object.keys(r.prizeCounts).forEach((n) => {
+      if (!fixedPrizeNames.includes(n) && !extraNames.includes(n)) extraNames.push(n);
+    });
+  });
+  const allPrizeNames = fixedPrizeNames.concat(extraNames);
+  const header = ['日付', '作品名', '何人目のお客様か', '回数', ...allPrizeNames];
+  const rows = [header];
+  logData.records.forEach((r) => {
+    rows.push([
+      r.date, r.ip, r.customerNo, r.draws,
+      ...allPrizeNames.map((n) => r.prizeCounts[n] || 0),
+    ]);
+  });
+  const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `coly_lottery_log_${todayDateStr()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function currentPrizes() {
@@ -340,10 +413,17 @@ function escapeHtml(str) {
 }
 
 /* ── ⑥ セッション結果画面 ── */
+function orderedResultNames() {
+  const order = currentPrizes().map(p => p.name);
+  if (sessionResults['はずれ'] !== undefined && !order.includes('はずれ')) order.push('はずれ');
+  return order.filter(name => sessionResults[name]);
+}
+
 function showSessionResult() {
+  recordSession();
   sessionIpTag.textContent = IP_TITLES[currentIp] || '';
   sessionResultList.innerHTML = '';
-  const names = Object.keys(sessionResults);
+  const names = orderedResultNames();
   if (names.length === 0) {
     sessionResultList.innerHTML = '<div class="row"><span>結果</span><span class="num">なし</span></div>';
   } else {
@@ -390,6 +470,9 @@ const bgFileInput = $('bgFileInput');
 const resetBgBtn = $('resetBgBtn');
 const cardBackFileInput = $('cardBackFileInput');
 const resetCardBackBtn = $('resetCardBackBtn');
+const logCountText = $('logCountText');
+const exportCsvBtn = $('exportCsvBtn');
+const resetLogBtn = $('resetLogBtn');
 
 let editing = null;
 let settingsActiveIp = 'matorihime';
@@ -400,8 +483,21 @@ function openSettings() {
   settingsActiveIp = 'matorihime';
   renderIpTabs();
   renderPrizeList();
+  logCountText.textContent = `記録件数：${logData.records.length}件`;
   settingsPanel.classList.add('open');
 }
+
+exportCsvBtn.addEventListener('click', () => {
+  if (logData.records.length === 0) { alert('まだ記録がありません。'); return; }
+  exportLogCsv();
+});
+
+resetLogBtn.addEventListener('click', () => {
+  if (!confirm(`来店記録（${logData.records.length}件）とお客様番号のカウントをリセットします。よろしいですか？`)) return;
+  logData = { counter: 0, records: [] };
+  saveLog();
+  logCountText.textContent = '記録件数：0件';
+});
 
 function renderIpTabs() {
   prizeIpTabsEl.innerHTML = '';
