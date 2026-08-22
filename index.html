@@ -20,9 +20,7 @@
   .screen {
     position: fixed; inset: 0; z-index: 3;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    background:
-      radial-gradient(circle at 50% 20%, rgba(255,214,120,0.35), transparent 55%),
-      linear-gradient(160deg, #241436 0%, #3a1f4d 45%, #5a2a52 100%);
+    background: #241436;
     background-size: cover; background-position: center;
   }
   .screen.hidden { display: none; }
@@ -55,16 +53,13 @@
   }
   header #ipLogoPanel {
     display: inline-block;
-    background: rgba(255,250,240,0.88);
-    border-radius: 999px;
-    padding: clamp(8px, 1.6vh, 14px) clamp(18px, 3vw, 30px);
     margin: 0 auto 3vh;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.35);
   }
   header #ipLogo {
     display: block;
     max-width: min(70vw, 440px);
     width: 100%;
+    filter: drop-shadow(0 4px 14px rgba(0,0,0,0.45));
     height: auto;
   }
   header .kicker {
