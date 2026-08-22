@@ -1,6 +1,7 @@
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbysYIZqwMkaELnuDgFCxy_KfjP_0jxWmJE-2kJclgNQLImtMmfI2SWdHEsRiIb-ONy6LA/exec';
 const LOCAL_KEY = 'coly_lottery_local_v1';
 const CARD_COUNT = 3;
+const MAX_DAY = 7;
 
 const IP_TITLES = {
   matorihime: 'ドラッグ王子とマトリ姫',
@@ -43,7 +44,15 @@ function saveLocalConfig() {
 }
 
 let config = loadLocalConfig();
-let serverState = { prizesByIp: { matorihime: [], stanmai: [] }, maxDraws: 20 };
+function emptyPrizesByIpDay() {
+  const o = {};
+  ['matorihime', 'stanmai'].forEach((ip) => {
+    o[ip] = {};
+    for (let d = 1; d <= MAX_DAY; d++) o[ip][d] = [];
+  });
+  return o;
+}
+let serverState = { prizesByIpDay: emptyPrizesByIpDay(), maxDraws: 20, currentDay: 1, days: [] };
 let drawing = false;
 
 let currentIp = null;
@@ -100,13 +109,26 @@ function networkError(e) {
 
 async function fetchState() {
   const data = await gasGet('state');
-  serverState.prizesByIp = data.prizesByIp || { matorihime: [], stanmai: [] };
+  serverState.prizesByIpDay = data.prizesByIpDay || emptyPrizesByIpDay();
   serverState.maxDraws = Number(data.maxDraws) || 20;
+  serverState.currentDay = Number(data.currentDay) || 1;
+  serverState.days = data.days || [];
   return serverState;
 }
 
+function dayLabel(day) {
+  const info = (serverState.days || []).find((d) => Number(d.day) === Number(day));
+  let label = `${day}日目`;
+  if (info && (info.date || info.time)) {
+    const parts = [info.date, info.time].filter(Boolean).join(' ');
+    label += `（${parts}）`;
+  }
+  return label;
+}
+
 function currentPrizes() {
-  return serverState.prizesByIp[currentIp] || [];
+  const byDay = serverState.prizesByIpDay[currentIp] || {};
+  return byDay[serverState.currentDay] || [];
 }
 
 /* ── テーマ（背景・トランプ柄）適用 ── */
@@ -411,6 +433,7 @@ adminHiddenZone.addEventListener('click', () => {
 /* ── 設定パネル ── */
 const settingsPanel = $('settingsPanel');
 const prizeIpTabsEl = $('prizeIpTabs');
+const prizeDayTabsEl = $('prizeDayTabs');
 const prizeListEl = $('prizeList');
 const addPrizeBtn = $('addPrizeBtn');
 const saveSettingsBtn = $('saveSettingsBtn');
@@ -424,9 +447,13 @@ const resetCardBackBtn = $('resetCardBackBtn');
 const logCountText = $('logCountText');
 const exportCsvBtn = $('exportCsvBtn');
 const resetLogBtn = $('resetLogBtn');
+const currentDaySelect = $('currentDaySelect');
+const switchDayBtn = $('switchDayBtn');
+const currentDayStatus = $('currentDayStatus');
 
-let editing = null; // { prizesByIp: {matorihime:[{name,total,remaining,sound}], stanmai:[...]}, maxDraws }
+let editing = null; // { prizesByIpDay: {matorihime:{1:[{name,total,remaining,sound}],...}, stanmai:{...}}, maxDraws }
 let settingsActiveIp = 'matorihime';
+let settingsActiveDay = 1;
 
 async function openSettings() {
   logCountText.textContent = '記録件数：読み込み中...';
@@ -441,19 +468,25 @@ async function openSettings() {
   }
   editing = {
     maxDraws: state.maxDraws,
-    prizesByIp: {
-      matorihime: state.prizesByIp.matorihime.map((p) => ({
-        ...p, sound: (config.sounds.matorihime || {})[p.name] || null,
-      })),
-      stanmai: state.prizesByIp.stanmai.map((p) => ({
-        ...p, sound: (config.sounds.stanmai || {})[p.name] || null,
-      })),
-    },
+    prizesByIpDay: {},
   };
+  ['matorihime', 'stanmai'].forEach((ip) => {
+    editing.prizesByIpDay[ip] = {};
+    for (let d = 1; d <= MAX_DAY; d++) {
+      const list = (state.prizesByIpDay[ip] && state.prizesByIpDay[ip][d]) || [];
+      editing.prizesByIpDay[ip][d] = list.map((p) => ({
+        ...p, sound: (config.sounds[ip] || {})[p.name] || null,
+      }));
+    }
+  });
+
   maxDrawsInput.value = editing.maxDraws;
   settingsActiveIp = 'matorihime';
+  settingsActiveDay = state.currentDay;
   renderIpTabs();
+  renderDayTabs();
   renderPrizeList();
+  renderCurrentDaySelect();
 
   gasGet('log').then((data) => {
     logCountText.textContent = `記録件数：${(data.records || []).length}件`;
@@ -461,6 +494,31 @@ async function openSettings() {
     logCountText.textContent = '記録件数：取得失敗';
   });
 }
+
+function renderCurrentDaySelect() {
+  currentDaySelect.innerHTML = '';
+  for (let d = 1; d <= MAX_DAY; d++) {
+    const opt = document.createElement('option');
+    opt.value = d;
+    opt.textContent = dayLabel(d);
+    if (d === serverState.currentDay) opt.selected = true;
+    currentDaySelect.appendChild(opt);
+  }
+  currentDayStatus.textContent = `現在稼働中：${dayLabel(serverState.currentDay)}`;
+}
+
+switchDayBtn.addEventListener('click', async () => {
+  const day = Number(currentDaySelect.value);
+  if (!confirm(`稼働日を「${dayLabel(day)}」に切り替えます。以降の抽選はこの日程の在庫が使われます。よろしいですか？`)) return;
+  try {
+    await gasPost({ action: 'setCurrentDay', day });
+    await fetchState();
+  } catch (e) {
+    networkError(e);
+    return;
+  }
+  renderCurrentDaySelect();
+});
 
 exportCsvBtn.addEventListener('click', async () => {
   let data;
@@ -501,11 +559,11 @@ function exportLogCsv(records) {
     });
   });
   const allPrizeNames = fixedPrizeNames.concat(extraNames);
-  const header = ['日付', '作品名', '何人目のお客様か', '回数', ...allPrizeNames];
+  const header = ['日付', '日程', '作品名', '何人目のお客様か', '回数', ...allPrizeNames];
   const rows = [header];
   records.forEach((r) => {
     rows.push([
-      r.date, r.ip, r.customerNo, r.draws,
+      r.date, r.day, r.ip, r.customerNo, r.draws,
       ...allPrizeNames.map((n) => (r.prizeCounts || {})[n] || 0),
     ]);
   });
@@ -539,9 +597,28 @@ function renderIpTabs() {
   });
 }
 
+function renderDayTabs() {
+  prizeDayTabsEl.innerHTML = '';
+  for (let d = 1; d <= MAX_DAY; d++) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = dayLabel(d);
+    if (d === settingsActiveDay) btn.classList.add('active');
+    btn.addEventListener('click', () => {
+      settingsActiveDay = d;
+      renderDayTabs();
+      renderPrizeList();
+    });
+    prizeDayTabsEl.appendChild(btn);
+  }
+}
+
 function activePrizeList() {
-  if (!editing.prizesByIp[settingsActiveIp]) editing.prizesByIp[settingsActiveIp] = [];
-  return editing.prizesByIp[settingsActiveIp];
+  if (!editing.prizesByIpDay[settingsActiveIp]) editing.prizesByIpDay[settingsActiveIp] = {};
+  if (!editing.prizesByIpDay[settingsActiveIp][settingsActiveDay]) {
+    editing.prizesByIpDay[settingsActiveIp][settingsActiveDay] = [];
+  }
+  return editing.prizesByIpDay[settingsActiveIp][settingsActiveDay];
 }
 
 function renderPrizeList() {
@@ -619,30 +696,37 @@ addPrizeBtn.addEventListener('click', () => {
 closeSettingsBtn.addEventListener('click', () => settingsPanel.classList.remove('open'));
 
 saveSettingsBtn.addEventListener('click', async () => {
-  Object.keys(editing.prizesByIp).forEach((ip) => {
-    editing.prizesByIp[ip] = editing.prizesByIp[ip].filter((p) => p.name.trim() !== '');
+  ['matorihime', 'stanmai'].forEach((ip) => {
+    for (let d = 1; d <= MAX_DAY; d++) {
+      editing.prizesByIpDay[ip][d] = editing.prizesByIpDay[ip][d].filter((p) => p.name.trim() !== '');
+    }
   });
   editing.maxDraws = Math.min(100, Math.max(1, parseInt(maxDrawsInput.value, 10) || 20));
 
   // 効果音はローカル保存
-  Object.keys(editing.prizesByIp).forEach((ip) => {
+  ['matorihime', 'stanmai'].forEach((ip) => {
     config.sounds[ip] = {};
-    editing.prizesByIp[ip].forEach((p) => {
-      if (p.sound) config.sounds[ip][p.name] = p.sound;
-    });
+    for (let d = 1; d <= MAX_DAY; d++) {
+      editing.prizesByIpDay[ip][d].forEach((p) => {
+        if (p.sound) config.sounds[ip][p.name] = p.sound;
+      });
+    }
   });
   saveLocalConfig();
 
   // 賞品在庫・回数設定はサーバーへ保存
   const payloadPrizes = {};
-  Object.keys(editing.prizesByIp).forEach((ip) => {
-    payloadPrizes[ip] = editing.prizesByIp[ip].map((p) => ({
-      name: p.name, total: Number(p.total) || 0, remaining: Number(p.remaining) || 0,
-    }));
+  ['matorihime', 'stanmai'].forEach((ip) => {
+    payloadPrizes[ip] = {};
+    for (let d = 1; d <= MAX_DAY; d++) {
+      payloadPrizes[ip][d] = editing.prizesByIpDay[ip][d].map((p) => ({
+        name: p.name, total: Number(p.total) || 0, remaining: Number(p.remaining) || 0,
+      }));
+    }
   });
   saveSettingsBtn.disabled = true;
   try {
-    await gasPost({ action: 'updateConfig', maxDraws: editing.maxDraws, prizesByIp: payloadPrizes });
+    await gasPost({ action: 'updateConfig', maxDraws: editing.maxDraws, prizesByIpDay: payloadPrizes });
     await fetchState();
   } catch (e) {
     networkError(e);
@@ -656,15 +740,16 @@ saveSettingsBtn.addEventListener('click', async () => {
 });
 
 resetCountsBtn.addEventListener('click', async () => {
-  if (!confirm(`「${IP_TITLES[settingsActiveIp]}」の当選数（在庫）をリセットします。よろしいですか？`)) return;
+  if (!confirm(`「${IP_TITLES[settingsActiveIp]}」${dayLabel(settingsActiveDay)}の当選数（在庫）をリセットします。よろしいですか？`)) return;
   try {
-    await gasPost({ action: 'resetStock', ip: settingsActiveIp });
+    await gasPost({ action: 'resetStock', ip: settingsActiveIp, day: settingsActiveDay });
     await fetchState();
   } catch (e) {
     networkError(e);
     return;
   }
-  editing.prizesByIp[settingsActiveIp] = serverState.prizesByIp[settingsActiveIp].map((p) => ({
+  const freshList = (serverState.prizesByIpDay[settingsActiveIp] && serverState.prizesByIpDay[settingsActiveIp][settingsActiveDay]) || [];
+  editing.prizesByIpDay[settingsActiveIp][settingsActiveDay] = freshList.map((p) => ({
     ...p, sound: (config.sounds[settingsActiveIp] || {})[p.name] || null,
   }));
   renderPrizeList();

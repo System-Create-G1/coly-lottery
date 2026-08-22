@@ -228,6 +228,15 @@
     background: #fff; color: #666; font-size: 13px; font-weight: 700; cursor: pointer;
   }
   .ipTabs button.active { border-color: #ffc65c; background: #fff3d8; color: #7a3b12; }
+  .dayTabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .dayTabs button {
+    padding: 6px 10px; border: 2px solid #ddd; border-radius: 6px;
+    background: #fff; color: #666; font-size: 12px; font-weight: 700; cursor: pointer;
+  }
+  .dayTabs button.active { border-color: #6b8fe0; background: #e8edfa; color: #223a7a; }
+  #currentDaySection { background: #fff3d8; border-radius: 10px; padding: 12px 14px; margin-bottom: 20px; }
+  #currentDaySelect { padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+  #currentDayStatus { font-size: 12px; color: #a3661f; font-weight: 700; }
   .prizeRow {
     display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
     padding: 8px 0; border-bottom: 1px solid #eee2c8;
@@ -415,12 +424,23 @@
   <div id="settingsCard">
     <h2>⚙ 管理設定</h2>
 
+    <section id="currentDaySection">
+      <h3>現在の稼働日（最大7日程まで設定可）</h3>
+      <div class="settingsField">
+        <span>今どの日程の在庫を使うか</span>
+        <select id="currentDaySelect"></select>
+        <button class="miniBtn" id="switchDayBtn">この日程に切り替える</button>
+      </div>
+      <div class="settingsField"><span id="currentDayStatus"></span></div>
+    </section>
+
     <section>
-      <h3>A. 賞品・在庫・効果音（作品ごとに別管理・デフォルト3種：A賞/B賞/C賞）</h3>
+      <h3>A. 賞品・在庫・効果音（作品×日程ごとに別管理・デフォルト3種：A賞/B賞/C賞）</h3>
       <div id="prizeIpTabs" class="ipTabs"></div>
+      <div id="prizeDayTabs" class="dayTabs"></div>
       <div id="prizeList"></div>
       <button id="addPrizeBtn">＋ 景品を追加</button>
-      <button id="resetCountsBtn">当選数（在庫）をリセット</button>
+      <button id="resetCountsBtn">この作品×日程の在庫をリセット</button>
     </section>
 
     <section>
