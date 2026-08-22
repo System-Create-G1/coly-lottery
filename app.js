@@ -276,14 +276,22 @@ async function onCardTap(card) {
   if (card.classList.contains('flipped')) return;
   drawing = true;
 
+  card.classList.add('loading');
+  document.querySelectorAll('.card').forEach((c) => c.classList.add('disabled'));
+  resultText.innerHTML = '<span class="spinner"></span>抽選中…';
+
   let result;
   try {
     result = await gasPost({ action: 'draw', ip: currentIp });
   } catch (e) {
     drawing = false;
+    card.classList.remove('loading');
+    document.querySelectorAll('.card').forEach((c) => c.classList.remove('disabled'));
+    resultText.textContent = '';
     networkError(e);
     return;
   }
+  card.classList.remove('loading');
 
   const wonName = result && result.won;
   const wonIdx = wonName ? currentPrizes().findIndex((p) => p.name === wonName) : -1;

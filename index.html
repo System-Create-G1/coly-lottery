@@ -108,6 +108,23 @@
   .card.flipped .card-inner { transform: rotateY(180deg); }
   .card.disabled { pointer-events: none; }
   .card.dim .card-inner { filter: brightness(0.55) saturate(0.7); }
+  .card.loading .card-back { animation: cardPulse 0.9s ease-in-out infinite; }
+  @keyframes cardPulse {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.55); }
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 1em; height: 1em;
+    border: 0.16em solid rgba(255,214,110,0.35);
+    border-top-color: #ffd66e;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: -0.15em;
+    margin-right: 0.4em;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   .card-face {
     position: absolute; inset: 0;
