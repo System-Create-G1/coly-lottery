@@ -6,6 +6,17 @@ const IP_TITLES = {
   matorihime: 'ドラッグ王子とマトリ姫',
   stanmai: 'スタンドマイヒーローズ',
 };
+const IP_LOGOS = {
+  matorihime: 'image/matori_logo.png',
+  stanmai: 'image/stamy_logo.png',
+};
+const IP_WAIT_LINES = {
+  matorihime: 'ちょっと待て、いま準備中だ…',
+  stanmai: '準備はいいか？もうすぐだ…',
+};
+function renderIpTagLogo(el, ip) {
+  el.innerHTML = `<img class="ip-tag-logo" src="${IP_LOGOS[ip] || ''}" alt="${IP_TITLES[ip] || ''}">`;
+}
 
 function defaultLocalConfig() {
   return {
@@ -50,6 +61,8 @@ const sessionResultScreen = $('sessionResultScreen');
 const ipTag = $('ipTag');
 const countIpTag = $('countIpTag');
 const sessionIpTag = $('sessionIpTag');
+const ipLoadingLine = $('ipLoadingLine');
+const ipLoadingText = $('ipLoadingText');
 const roundTag = $('roundTag');
 const countGrid = $('countGrid');
 const stage = $('stage');
@@ -203,13 +216,22 @@ document.querySelectorAll('.ip-btn').forEach((btn) => {
 
 async function selectIP(ip) {
   currentIp = ip;
-  countIpTag.textContent = IP_TITLES[ip] || '';
+  renderIpTagLogo(countIpTag, ip);
+
+  ipLoadingText.textContent = IP_WAIT_LINES[ip] || '';
+  ipLoadingLine.classList.remove('hidden');
+  document.querySelectorAll('.ip-btn').forEach((b) => b.classList.add('disabled'));
+
   try {
     await fetchState();
   } catch (e) {
+    ipLoadingLine.classList.add('hidden');
+    document.querySelectorAll('.ip-btn').forEach((b) => b.classList.remove('disabled'));
     networkError(e);
     return;
   }
+  ipLoadingLine.classList.add('hidden');
+  document.querySelectorAll('.ip-btn').forEach((b) => b.classList.remove('disabled'));
   buildCountGrid();
   showScreen(countSelectScreen);
 }
@@ -231,7 +253,7 @@ function chooseDrawCount(n) {
   sessionMaxDraws = n;
   sessionDrawsDone = 0;
   sessionResults = {};
-  ipTag.textContent = IP_TITLES[currentIp] || '';
+  renderIpTagLogo(ipTag, currentIp);
   showScreen(appEl);
   startRound();
 }
@@ -278,7 +300,7 @@ async function onCardTap(card) {
 
   card.classList.add('loading');
   document.querySelectorAll('.card').forEach((c) => c.classList.add('disabled'));
-  resultText.innerHTML = '<span class="spinner"></span>抽選中…';
+  resultText.innerHTML = '<span class="spinner"></span>💕胸きゅん💕どきどき中…';
 
   let result;
   try {
@@ -350,7 +372,7 @@ function showSessionResult() {
   gasPost({ action: 'recordSession', ip: currentIp, draws: sessionMaxDraws, prizeCounts: sessionResults })
     .catch((e) => console.error('recordSession failed', e));
 
-  sessionIpTag.textContent = IP_TITLES[currentIp] || '';
+  renderIpTagLogo(sessionIpTag, currentIp);
   sessionResultList.innerHTML = '';
   const names = orderedResultNames();
   if (names.length === 0) {

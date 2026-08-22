@@ -76,10 +76,14 @@
     letter-spacing: 0.06em;
   }
   header .ip-tag {
-    margin-top: 4px;
-    font-size: clamp(12px, 2.4vw, 16px);
-    color: #ffe9c2;
-    letter-spacing: 0.08em;
+    margin-top: 6px;
+    display: flex; justify-content: center;
+  }
+  header .ip-tag-logo {
+    max-width: min(60vw, 260px);
+    max-height: 44px;
+    width: auto; height: auto;
+    object-fit: contain;
   }
   header .round-tag {
     margin-top: 2px;
@@ -296,6 +300,15 @@
     display: flex; align-items: center; justify-content: center;
   }
   .ip-btn:active { transform: translateY(4px); filter: brightness(1.15); }
+  .ip-btn.disabled { pointer-events: none; opacity: 0.5; }
+  .loadingLine {
+    position: relative; z-index: 2;
+    margin-top: 4vh;
+    font-size: clamp(14px, 3vw, 18px);
+    color: #ffe9c2;
+    text-align: center;
+  }
+  .loadingLine.hidden { display: none; }
   .ip-btn .ip-btn-label {
     display: block; white-space: nowrap; overflow: hidden;
     font-size: 22px;
@@ -364,6 +377,7 @@
     <button class="ip-btn" data-ip="matorihime"><img class="ip-btn-logo" src="image/matori_logo.png" alt="ドラッグ王子とマトリ姫"></button>
     <button class="ip-btn" data-ip="stanmai"><img class="ip-btn-logo" src="image/stamy_logo.png" alt="スタンドマイヒーローズ"></button>
   </div>
+  <div id="ipLoadingLine" class="loadingLine hidden"><span class="spinner"></span><span id="ipLoadingText"></span></div>
 </div>
 
 <div id="countSelectScreen" class="screen hidden">
@@ -377,8 +391,7 @@
 
 <div id="app" class="screen hidden">
   <header>
-    <div class="kicker">CONGRATULATIONS</div>
-    <h1>抽選カード</h1>
+    <h1>どきどきくじ</h1>
     <div class="ip-tag" id="ipTag"></div>
     <div class="round-tag" id="roundTag"></div>
   </header>
@@ -391,11 +404,11 @@
 <div id="sessionResultScreen" class="screen hidden">
   <header>
     <div class="kicker">RESULT</div>
-    <h1>結果発表！</h1>
+    <h1>どきどき💕結果発表</h1>
     <div class="ip-tag" id="sessionIpTag"></div>
   </header>
   <div id="sessionResultList"></div>
-  <button class="bigBtn" id="backToStartBtn">TOP</button>
+  <button class="bigBtn" id="backToStartBtn">おしまい</button>
 </div>
 
 <div id="settingsPanel">
