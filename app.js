@@ -1,7 +1,5 @@
-const CONFIG_KEY = 'coly_lottery_config_v4';
-const OLD_CONFIG_KEY_V3 = 'coly_lottery_config_v3';
-const OLD_PRIZES_KEY = 'coly_lottery_prizes_v2';
-const LOG_KEY = 'coly_lottery_log_v1';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbysYIZqwMkaELnuDgFCxy_KfjP_0jxWmJE-2kJclgNQLImtMmfI2SWdHEsRiIb-ONy6LA/exec';
+const LOCAL_KEY = 'coly_lottery_local_v1';
 const CARD_COUNT = 3;
 
 const IP_TITLES = {
@@ -9,27 +7,32 @@ const IP_TITLES = {
   stanmai: 'スタンドマイヒーローズ',
 };
 
-function defaultPrizes() {
-  return [
-    { id: 'p1', name: 'A賞', total: 1, remaining: 1, sound: null },
-    { id: 'p2', name: 'B賞', total: 4, remaining: 4, sound: null },
-    { id: 'p3', name: 'C賞', total: 45, remaining: 45, sound: null },
-  ];
-}
-
-function defaultConfig() {
+function defaultLocalConfig() {
   return {
-    prizesByIp: {
-      matorihime: defaultPrizes(),
-      stanmai: defaultPrizes(),
-    },
-    maxDraws: 20,
     background: null,
     cardBack: null,
+    sounds: { matorihime: {}, stanmai: {} }, // ip -> { 賞品名: soundDataURL }
   };
 }
 
-let config = loadConfig();
+/* ── ローカル専用設定（背景・トランプ柄・効果音。端末ごと） ── */
+function loadLocalConfig() {
+  try {
+    const raw = localStorage.getItem(LOCAL_KEY);
+    if (raw) return Object.assign(defaultLocalConfig(), JSON.parse(raw));
+  } catch (e) {}
+  return defaultLocalConfig();
+}
+function saveLocalConfig() {
+  try {
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(config));
+  } catch (e) {
+    alert('保存容量の上限を超えた可能性があります。背景・効果音のファイルサイズを小さくしてお試しください。');
+  }
+}
+
+let config = loadLocalConfig();
+let serverState = { prizesByIp: { matorihime: [], stanmai: [] }, maxDraws: 20 };
 let drawing = false;
 
 let currentIp = null;
@@ -54,148 +57,48 @@ const resultText = $('resultText');
 const sessionResultList = $('sessionResultList');
 const backToStartBtn = $('backToStartBtn');
 
-/* ── config load/save ── */
-function loadConfig() {
-  try {
-    const raw = localStorage.getItem(CONFIG_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      const base = defaultConfig();
-      return Object.assign(base, parsed, {
-        prizesByIp: Object.assign(base.prizesByIp, parsed.prizesByIp || {}),
-      });
-    }
-    // v3（作品共通の在庫）からの移行：両作品に同じ在庫をコピーする
-    const oldV3Raw = localStorage.getItem(OLD_CONFIG_KEY_V3);
-    if (oldV3Raw) {
-      const old = JSON.parse(oldV3Raw);
-      const base = defaultConfig();
-      if (Array.isArray(old.prizes)) {
-        base.prizesByIp.matorihime = JSON.parse(JSON.stringify(old.prizes));
-        base.prizesByIp.stanmai = JSON.parse(JSON.stringify(old.prizes));
-      }
-      base.maxDraws = old.maxDraws || base.maxDraws;
-      base.background = old.background || base.background;
-      base.cardBack = old.cardBack || base.cardBack;
-      return base;
-    }
-    // さらに旧いバージョンからの移行
-    const oldRaw = localStorage.getItem(OLD_PRIZES_KEY);
-    if (oldRaw) {
-      const oldPrizes = JSON.parse(oldRaw).map(p => ({ ...p, sound: null }));
-      const base = defaultConfig();
-      base.prizesByIp.matorihime = JSON.parse(JSON.stringify(oldPrizes));
-      base.prizesByIp.stanmai = JSON.parse(JSON.stringify(oldPrizes));
-      return base;
-    }
-  } catch (e) {}
-  return defaultConfig();
+/* ── GASバックエンド通信 ── */
+function gasGet(action, params) {
+  const url = new URL(GAS_URL);
+  url.searchParams.set('action', action);
+  Object.keys(params || {}).forEach((k) => url.searchParams.set(k, params[k]));
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  return fetch(url.toString(), { signal: ctrl.signal })
+    .then((res) => res.json())
+    .finally(() => clearTimeout(timer));
+}
+function gasPost(body) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
+  return fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body),
+    signal: ctrl.signal,
+  })
+    .then((res) => res.json())
+    .finally(() => clearTimeout(timer));
+}
+function networkError(e) {
+  console.error(e);
+  alert('通信エラーが発生しました。ネットワーク環境をご確認の上、もう一度お試しください。');
 }
 
-function saveConfig() {
-  try {
-    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-  } catch (e) {
-    alert('保存容量の上限を超えた可能性があります。背景・効果音のファイルサイズを小さくしてお試しください。');
-  }
-}
-
-/* ── 来店記録（お客様ごとの抽選履歴） ── */
-function loadLog() {
-  try {
-    const raw = localStorage.getItem(LOG_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch (e) {}
-  return { counter: 0, records: [] };
-}
-
-function saveLog() {
-  try {
-    localStorage.setItem(LOG_KEY, JSON.stringify(logData));
-  } catch (e) {
-    alert('記録データの保存容量の上限を超えた可能性があります。設定画面からCSV出力・リセットをご検討ください。');
-  }
-}
-
-let logData = loadLog();
-
-function todayDateStr() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function recordSession() {
-  logData.counter++;
-  logData.records.push({
-    date: todayDateStr(),
-    ip: IP_TITLES[currentIp] || currentIp,
-    customerNo: logData.counter,
-    draws: sessionMaxDraws,
-    prizeCounts: JSON.parse(JSON.stringify(sessionResults)),
-  });
-  saveLog();
-}
-
-function csvEscape(v) {
-  const s = String(v);
-  if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
-  return s;
-}
-
-function exportLogCsv() {
-  const fixedPrizeNames = ['A賞', 'B賞', 'C賞'];
-  const extraNames = [];
-  logData.records.forEach((r) => {
-    Object.keys(r.prizeCounts).forEach((n) => {
-      if (!fixedPrizeNames.includes(n) && !extraNames.includes(n)) extraNames.push(n);
-    });
-  });
-  const allPrizeNames = fixedPrizeNames.concat(extraNames);
-  const header = ['日付', '作品名', '何人目のお客様か', '回数', ...allPrizeNames];
-  const rows = [header];
-  logData.records.forEach((r) => {
-    rows.push([
-      r.date, r.ip, r.customerNo, r.draws,
-      ...allPrizeNames.map((n) => r.prizeCounts[n] || 0),
-    ]);
-  });
-  const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\r\n');
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `coly_lottery_log_${todayDateStr()}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+async function fetchState() {
+  const data = await gasGet('state');
+  serverState.prizesByIp = data.prizesByIp || { matorihime: [], stanmai: [] };
+  serverState.maxDraws = Number(data.maxDraws) || 20;
+  return serverState;
 }
 
 function currentPrizes() {
-  return config.prizesByIp[currentIp] || [];
-}
-
-function totalRemaining() {
-  return currentPrizes().reduce((sum, p) => sum + Math.max(0, p.remaining), 0);
-}
-
-function drawPrize() {
-  const total = totalRemaining();
-  if (total <= 0) return null;
-  const prizes = currentPrizes();
-  let r = Math.random() * total;
-  for (const p of prizes) {
-    if (p.remaining <= 0) continue;
-    if (r < p.remaining) return p;
-    r -= p.remaining;
-  }
-  return prizes[prizes.length - 1];
+  return serverState.prizesByIp[currentIp] || [];
 }
 
 /* ── テーマ（背景・トランプ柄）適用 ── */
 function applyTheme() {
-  document.querySelectorAll('.screen').forEach(el => {
+  document.querySelectorAll('.screen').forEach((el) => {
     if (config.background) {
       el.style.backgroundImage = `url(${config.background})`;
     } else {
@@ -271,35 +174,42 @@ function playTone(freqs, dur = 0.18) {
     osc.start(t0); osc.stop(t0 + dur);
   });
 }
-function playDefaultSoundForPrize(prize, idx) {
-  if (!prize) { playTone([392, 330]); return; }
-  if (prize.name === 'A賞' || idx === 0) playTone([523.25, 659.25, 783.99, 1046.5], 0.16);
-  else if (prize.name === 'B賞' || idx === 1) playTone([523.25, 659.25], 0.2);
-  else if (prize.name === 'C賞' || idx === 2) playTone([523.25], 0.25);
+function playDefaultSoundForPrize(name, idx) {
+  if (!name) { playTone([392, 330]); return; }
+  if (name === 'A賞' || idx === 0) playTone([523.25, 659.25, 783.99, 1046.5], 0.16);
+  else if (name === 'B賞' || idx === 1) playTone([523.25, 659.25], 0.2);
+  else if (name === 'C賞' || idx === 2) playTone([523.25], 0.25);
   else playTone([440, 550], 0.18);
 }
-function playPrizeSound(prize, idx) {
-  if (prize && prize.sound) {
-    try { new Audio(prize.sound).play(); return; } catch (e) {}
+function playPrizeSound(ip, name, idx) {
+  const custom = name && config.sounds[ip] && config.sounds[ip][name];
+  if (custom) {
+    try { new Audio(custom).play(); return; } catch (e) {}
   }
-  playDefaultSoundForPrize(prize, idx);
+  playDefaultSoundForPrize(name, idx);
 }
 function playBtnClick() { playTone([660], 0.06); }
 
 /* ── 画面切り替え ── */
 function showScreen(el) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+  document.querySelectorAll('.screen').forEach((s) => s.classList.add('hidden'));
   el.classList.remove('hidden');
 }
 
 /* ── ① IP選択 ── */
-document.querySelectorAll('.ip-btn').forEach(btn => {
+document.querySelectorAll('.ip-btn').forEach((btn) => {
   btn.addEventListener('click', () => { playBtnClick(); selectIP(btn.dataset.ip); });
 });
 
-function selectIP(ip) {
+async function selectIP(ip) {
   currentIp = ip;
   countIpTag.textContent = IP_TITLES[ip] || '';
+  try {
+    await fetchState();
+  } catch (e) {
+    networkError(e);
+    return;
+  }
   buildCountGrid();
   showScreen(countSelectScreen);
 }
@@ -307,7 +217,7 @@ function selectIP(ip) {
 /* ── ② 回数選択 ── */
 function buildCountGrid() {
   countGrid.innerHTML = '';
-  const max = Math.min(100, Math.max(1, Number(config.maxDraws) || 20));
+  const max = Math.min(100, Math.max(1, Number(serverState.maxDraws) || 20));
   for (let n = 1; n <= max; n++) {
     const btn = document.createElement('button');
     btn.className = 'count-btn';
@@ -361,19 +271,28 @@ function startRound() {
   });
 }
 
-function onCardTap(card) {
+async function onCardTap(card) {
   if (drawing) return;
   if (card.classList.contains('flipped')) return;
   drawing = true;
 
-  const won = drawPrize();
-  const wonIdx = won ? currentPrizes().indexOf(won) : -1;
-  const isMiss = !won || won.name === 'はずれ';
+  let result;
+  try {
+    result = await gasPost({ action: 'draw', ip: currentIp });
+  } catch (e) {
+    drawing = false;
+    networkError(e);
+    return;
+  }
 
-  if (won) {
-    won.remaining = Math.max(0, won.remaining - 1);
-    saveConfig();
-    sessionResults[won.name] = (sessionResults[won.name] || 0) + 1;
+  const wonName = result && result.won;
+  const wonIdx = wonName ? currentPrizes().findIndex((p) => p.name === wonName) : -1;
+  const isMiss = !wonName || wonName === 'はずれ';
+
+  if (!isMiss) {
+    sessionResults[wonName] = (sessionResults[wonName] || 0) + 1;
+    const prizeObj = currentPrizes()[wonIdx];
+    if (prizeObj) prizeObj.remaining = Math.max(0, prizeObj.remaining - 1);
   } else {
     sessionResults['はずれ'] = (sessionResults['はずれ'] || 0) + 1;
   }
@@ -384,16 +303,16 @@ function onCardTap(card) {
     front.classList.add('miss');
     label.innerHTML = `はずれ`;
   } else {
-    label.innerHTML = `<div class="medal">🎁</div>${escapeHtml(won.name)}`;
+    label.innerHTML = `<div class="medal">🎁</div>${escapeHtml(wonName)}`;
   }
   card.classList.add('flipped');
-  playPrizeSound(isMiss ? null : won, wonIdx);
+  playPrizeSound(currentIp, isMiss ? null : wonName, wonIdx);
 
-  document.querySelectorAll('.card').forEach(c => {
+  document.querySelectorAll('.card').forEach((c) => {
     if (c !== card) c.classList.add('dim', 'disabled');
   });
 
-  resultText.textContent = isMiss ? 'また挑戦してね！' : `${won.name} おめでとうございます！`;
+  resultText.textContent = isMiss ? 'また挑戦してね！' : `${wonName} おめでとうございます！`;
 
   setTimeout(() => {
     drawing = false;
@@ -407,27 +326,29 @@ function onCardTap(card) {
 }
 
 function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  return String(str).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
 }
 
 /* ── ⑥ セッション結果画面 ── */
 function orderedResultNames() {
-  const order = currentPrizes().map(p => p.name);
+  const order = currentPrizes().map((p) => p.name);
   if (sessionResults['はずれ'] !== undefined && !order.includes('はずれ')) order.push('はずれ');
-  return order.filter(name => sessionResults[name]);
+  return order.filter((name) => sessionResults[name]);
 }
 
 function showSessionResult() {
-  recordSession();
+  gasPost({ action: 'recordSession', ip: currentIp, draws: sessionMaxDraws, prizeCounts: sessionResults })
+    .catch((e) => console.error('recordSession failed', e));
+
   sessionIpTag.textContent = IP_TITLES[currentIp] || '';
   sessionResultList.innerHTML = '';
   const names = orderedResultNames();
   if (names.length === 0) {
     sessionResultList.innerHTML = '<div class="row"><span>結果</span><span class="num">なし</span></div>';
   } else {
-    names.forEach(name => {
+    names.forEach((name) => {
       const row = document.createElement('div');
       row.className = 'row';
       row.innerHTML = `<span>${escapeHtml(name)}</span><span class="num">× ${sessionResults[name]}</span>`;
@@ -474,34 +395,107 @@ const logCountText = $('logCountText');
 const exportCsvBtn = $('exportCsvBtn');
 const resetLogBtn = $('resetLogBtn');
 
-let editing = null;
+let editing = null; // { prizesByIp: {matorihime:[{name,total,remaining,sound}], stanmai:[...]}, maxDraws }
 let settingsActiveIp = 'matorihime';
 
-function openSettings() {
-  editing = JSON.parse(JSON.stringify(config));
+async function openSettings() {
+  logCountText.textContent = '記録件数：読み込み中...';
+  settingsPanel.classList.add('open');
+  let state;
+  try {
+    state = await fetchState();
+  } catch (e) {
+    networkError(e);
+    settingsPanel.classList.remove('open');
+    return;
+  }
+  editing = {
+    maxDraws: state.maxDraws,
+    prizesByIp: {
+      matorihime: state.prizesByIp.matorihime.map((p) => ({
+        ...p, sound: (config.sounds.matorihime || {})[p.name] || null,
+      })),
+      stanmai: state.prizesByIp.stanmai.map((p) => ({
+        ...p, sound: (config.sounds.stanmai || {})[p.name] || null,
+      })),
+    },
+  };
   maxDrawsInput.value = editing.maxDraws;
   settingsActiveIp = 'matorihime';
   renderIpTabs();
   renderPrizeList();
-  logCountText.textContent = `記録件数：${logData.records.length}件`;
-  settingsPanel.classList.add('open');
+
+  gasGet('log').then((data) => {
+    logCountText.textContent = `記録件数：${(data.records || []).length}件`;
+  }).catch(() => {
+    logCountText.textContent = '記録件数：取得失敗';
+  });
 }
 
-exportCsvBtn.addEventListener('click', () => {
-  if (logData.records.length === 0) { alert('まだ記録がありません。'); return; }
-  exportLogCsv();
+exportCsvBtn.addEventListener('click', async () => {
+  let data;
+  try {
+    data = await gasGet('log');
+  } catch (e) {
+    networkError(e);
+    return;
+  }
+  const records = data.records || [];
+  if (records.length === 0) { alert('まだ記録がありません。'); return; }
+  exportLogCsv(records);
 });
 
-resetLogBtn.addEventListener('click', () => {
-  if (!confirm(`来店記録（${logData.records.length}件）とお客様番号のカウントをリセットします。よろしいですか？`)) return;
-  logData = { counter: 0, records: [] };
-  saveLog();
+resetLogBtn.addEventListener('click', async () => {
+  if (!confirm('来店記録とお客様番号のカウントをリセットします。よろしいですか？')) return;
+  try {
+    await gasPost({ action: 'resetLog' });
+  } catch (e) {
+    networkError(e);
+    return;
+  }
   logCountText.textContent = '記録件数：0件';
 });
 
+function csvEscape(v) {
+  const s = String(v);
+  if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function exportLogCsv(records) {
+  const fixedPrizeNames = ['A賞', 'B賞', 'C賞'];
+  const extraNames = [];
+  records.forEach((r) => {
+    Object.keys(r.prizeCounts || {}).forEach((n) => {
+      if (!fixedPrizeNames.includes(n) && !extraNames.includes(n)) extraNames.push(n);
+    });
+  });
+  const allPrizeNames = fixedPrizeNames.concat(extraNames);
+  const header = ['日付', '作品名', '何人目のお客様か', '回数', ...allPrizeNames];
+  const rows = [header];
+  records.forEach((r) => {
+    rows.push([
+      r.date, r.ip, r.customerNo, r.draws,
+      ...allPrizeNames.map((n) => (r.prizeCounts || {})[n] || 0),
+    ]);
+  });
+  const csv = rows.map((row) => row.map(csvEscape).join(',')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const pad = (n) => String(n).padStart(2, '0');
+  const d = new Date();
+  a.download = `coly_lottery_log_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function renderIpTabs() {
   prizeIpTabsEl.innerHTML = '';
-  Object.keys(IP_TITLES).forEach(ip => {
+  Object.keys(IP_TITLES).forEach((ip) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.textContent = IP_TITLES[ip];
@@ -542,8 +536,8 @@ function renderPrizeList() {
     prizeListEl.appendChild(row);
   });
 
-  prizeListEl.querySelectorAll('input[type=text], input[type=number]').forEach(inp => {
-    inp.addEventListener('input', e => {
+  prizeListEl.querySelectorAll('input[type=text], input[type=number]').forEach((inp) => {
+    inp.addEventListener('input', (e) => {
       const idx = Number(e.target.dataset.idx);
       const field = e.target.dataset.field;
       const list = activePrizeList();
@@ -557,8 +551,8 @@ function renderPrizeList() {
       renderPrizeList();
     });
   });
-  prizeListEl.querySelectorAll('.soundInput').forEach(inp => {
-    inp.addEventListener('change', e => {
+  prizeListEl.querySelectorAll('.soundInput').forEach((inp) => {
+    inp.addEventListener('change', (e) => {
       const idx = Number(e.target.dataset.idx);
       const file = e.target.files[0];
       if (!file) return;
@@ -570,15 +564,16 @@ function renderPrizeList() {
       reader.readAsDataURL(file);
     });
   });
-  prizeListEl.querySelectorAll('.testSoundBtn').forEach(btn => {
-    btn.addEventListener('click', e => {
+  prizeListEl.querySelectorAll('.testSoundBtn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
       const idx = Number(e.target.dataset.idx);
-      const list = activePrizeList();
-      playPrizeSound(list[idx], idx);
+      const p = activePrizeList()[idx];
+      if (p.sound) { try { new Audio(p.sound).play(); } catch (err) {} }
+      else playDefaultSoundForPrize(p.name, idx);
     });
   });
-  prizeListEl.querySelectorAll('.removeBtn').forEach(btn => {
-    btn.addEventListener('click', e => {
+  prizeListEl.querySelectorAll('.removeBtn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
       const idx = Number(e.target.dataset.idx);
       activePrizeList().splice(idx, 1);
       renderPrizeList();
@@ -587,48 +582,83 @@ function renderPrizeList() {
 }
 
 addPrizeBtn.addEventListener('click', () => {
-  activePrizeList().push({ id: 'p' + Date.now(), name: '新しい景品', total: 1, remaining: 1, sound: null });
+  activePrizeList().push({ name: '新しい景品', total: 1, remaining: 1, sound: null });
   renderPrizeList();
 });
 
 closeSettingsBtn.addEventListener('click', () => settingsPanel.classList.remove('open'));
 
-saveSettingsBtn.addEventListener('click', () => {
-  Object.keys(editing.prizesByIp).forEach(ip => {
-    editing.prizesByIp[ip] = editing.prizesByIp[ip].filter(p => p.name.trim() !== '');
+saveSettingsBtn.addEventListener('click', async () => {
+  Object.keys(editing.prizesByIp).forEach((ip) => {
+    editing.prizesByIp[ip] = editing.prizesByIp[ip].filter((p) => p.name.trim() !== '');
   });
   editing.maxDraws = Math.min(100, Math.max(1, parseInt(maxDrawsInput.value, 10) || 20));
-  config = editing;
-  saveConfig();
+
+  // 効果音はローカル保存
+  Object.keys(editing.prizesByIp).forEach((ip) => {
+    config.sounds[ip] = {};
+    editing.prizesByIp[ip].forEach((p) => {
+      if (p.sound) config.sounds[ip][p.name] = p.sound;
+    });
+  });
+  saveLocalConfig();
+
+  // 賞品在庫・回数設定はサーバーへ保存
+  const payloadPrizes = {};
+  Object.keys(editing.prizesByIp).forEach((ip) => {
+    payloadPrizes[ip] = editing.prizesByIp[ip].map((p) => ({
+      name: p.name, total: Number(p.total) || 0, remaining: Number(p.remaining) || 0,
+    }));
+  });
+  saveSettingsBtn.disabled = true;
+  try {
+    await gasPost({ action: 'updateConfig', maxDraws: editing.maxDraws, prizesByIp: payloadPrizes });
+    await fetchState();
+  } catch (e) {
+    networkError(e);
+    saveSettingsBtn.disabled = false;
+    return;
+  }
+  saveSettingsBtn.disabled = false;
   applyTheme();
   fitAllLabels();
   settingsPanel.classList.remove('open');
 });
 
-resetCountsBtn.addEventListener('click', () => {
+resetCountsBtn.addEventListener('click', async () => {
   if (!confirm(`「${IP_TITLES[settingsActiveIp]}」の当選数（在庫）をリセットします。よろしいですか？`)) return;
-  editing.prizesByIp[settingsActiveIp] = activePrizeList().map(p => ({ ...p, remaining: Number(p.total) || 0 }));
+  try {
+    await gasPost({ action: 'resetStock', ip: settingsActiveIp });
+    await fetchState();
+  } catch (e) {
+    networkError(e);
+    return;
+  }
+  editing.prizesByIp[settingsActiveIp] = serverState.prizesByIp[settingsActiveIp].map((p) => ({
+    ...p, sound: (config.sounds[settingsActiveIp] || {})[p.name] || null,
+  }));
   renderPrizeList();
 });
 
-bgFileInput.addEventListener('change', e => {
+bgFileInput.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => { editing.background = reader.result; };
+  reader.onload = () => { editing.background = reader.result; config.background = reader.result; saveLocalConfig(); applyTheme(); };
   reader.readAsDataURL(file);
 });
-resetBgBtn.addEventListener('click', () => { editing.background = null; bgFileInput.value = ''; });
+resetBgBtn.addEventListener('click', () => { config.background = null; bgFileInput.value = ''; saveLocalConfig(); applyTheme(); });
 
-cardBackFileInput.addEventListener('change', e => {
+cardBackFileInput.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => { editing.cardBack = reader.result; };
+  reader.onload = () => { config.cardBack = reader.result; saveLocalConfig(); applyTheme(); };
   reader.readAsDataURL(file);
 });
-resetCardBackBtn.addEventListener('click', () => { editing.cardBack = null; cardBackFileInput.value = ''; });
+resetCardBackBtn.addEventListener('click', () => { config.cardBack = null; cardBackFileInput.value = ''; saveLocalConfig(); applyTheme(); });
 
 /* ── 初期化 ── */
 applyTheme();
 fitAllLabels();
+fetchState().catch((e) => console.error('initial fetchState failed', e));

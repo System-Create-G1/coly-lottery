@@ -42,6 +42,7 @@ function respond_(obj) {
 }
 
 function doGet(e) {
+  if (e.parameter.action === 'ping') return respond_({ pong: 'v2', now: new Date().toISOString() });
   ensureSetup_();
   const action = e.parameter.action;
   if (action === 'state') return respond_(getState_());
@@ -119,8 +120,12 @@ function getLogRecords_() {
   for (let i = 1; i < values.length; i++) {
     let prizeCounts = {};
     try { prizeCounts = JSON.parse(values[i][4]); } catch (e) {}
+    let dateVal = values[i][0];
+    if (Object.prototype.toString.call(dateVal) === '[object Date]') {
+      dateVal = Utilities.formatDate(dateVal, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    }
     records.push({
-      date: values[i][0],
+      date: dateVal,
       ip: values[i][1],
       customerNo: values[i][2],
       draws: values[i][3],
