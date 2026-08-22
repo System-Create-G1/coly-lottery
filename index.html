@@ -85,6 +85,8 @@
     width: auto; height: auto;
     object-fit: contain;
   }
+  header .ip-tag.backable { cursor: pointer; }
+  header .ip-tag.backable:active { transform: translateY(2px); }
   header .round-tag {
     margin-top: 2px;
     font-size: clamp(11px, 2vw, 14px);
@@ -393,7 +395,7 @@
   <header>
     <div class="kicker">HOW MANY TIMES?</div>
     <h1>何回引く？</h1>
-    <div class="ip-tag" id="countIpTag"></div>
+    <div class="ip-tag backable" id="countIpTag" title="作品選択に戻る"></div>
   </header>
   <div id="countGrid"></div>
 </div>
@@ -401,7 +403,7 @@
 <div id="app" class="screen hidden">
   <header>
     <h1>どきどきくじ</h1>
-    <div class="ip-tag" id="ipTag"></div>
+    <div class="ip-tag backable" id="ipTag" title="回数選択に戻る"></div>
     <div class="round-tag" id="roundTag"></div>
   </header>
 

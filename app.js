@@ -416,6 +416,20 @@ backToStartBtn.addEventListener('click', () => {
   showScreen(ipSelectScreen);
 });
 
+/* ── ロゴタップで前の画面に戻る ── */
+countIpTag.addEventListener('click', () => {
+  playBtnClick();
+  currentIp = null;
+  showScreen(ipSelectScreen);
+});
+
+ipTag.addEventListener('click', () => {
+  playBtnClick();
+  sessionDrawsDone = 0;
+  sessionResults = {};
+  showScreen(countSelectScreen);
+});
+
 /* ── 隠し管理画面アクセス（お客様には見せない） ── */
 const adminHiddenZone = $('adminHiddenZone');
 let adminTapCount = 0;
