@@ -80,27 +80,37 @@ const sessionResultList = $('sessionResultList');
 const backToStartBtn = $('backToStartBtn');
 
 /* ── GASバックエンド通信 ── */
+const GAS_TIMEOUT_MS = 20000;
+
+function gasFetchOnce(url, options) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), GAS_TIMEOUT_MS);
+  return fetch(url, { ...options, signal: ctrl.signal })
+    .then((res) => res.json())
+    .finally(() => clearTimeout(timer));
+}
+
+function gasFetchWithRetry(url, options) {
+  return gasFetchOnce(url, options).catch((e) => {
+    console.warn('GAS通信失敗、1回だけ再試行します', e);
+    return new Promise((resolve) => setTimeout(resolve, 800)).then(() =>
+      gasFetchOnce(url, options)
+    );
+  });
+}
+
 function gasGet(action, params) {
   const url = new URL(GAS_URL);
   url.searchParams.set('action', action);
   Object.keys(params || {}).forEach((k) => url.searchParams.set(k, params[k]));
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 10000);
-  return fetch(url.toString(), { signal: ctrl.signal })
-    .then((res) => res.json())
-    .finally(() => clearTimeout(timer));
+  return gasFetchWithRetry(url.toString());
 }
 function gasPost(body) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 10000);
-  return fetch(GAS_URL, {
+  return gasFetchWithRetry(GAS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(body),
-    signal: ctrl.signal,
-  })
-    .then((res) => res.json())
-    .finally(() => clearTimeout(timer));
+  });
 }
 function networkError(e) {
   console.error(e);
